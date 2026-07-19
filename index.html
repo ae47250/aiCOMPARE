@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Note Extraction Bench</title>
+<style>
+:root{
+  --ink:#1b1f1d; --paper:#f7f6f2; --panel:#fff;
+  --rule:#d9dad4; --soft:#ecece7; --mute:#6a6e68;
+  --ok:#2f7d4f; --info:#2a5f94; --warn:#8a6a18; --bad:#a03d3d;
+  --clay:#a8562c; --purple:#6b4ca8;
+  --mono:'SFMono-Regular',Consolas,'Liberation Mono',monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:26px 22px 90px;background:var(--paper);color:var(--ink);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+.wrap{max-width:1240px;margin:0 auto}
+h1{font-size:23px;margin:0 0 6px;font-weight:600;letter-spacing:-.02em}
+.sub{color:var(--mute);font-size:13.5px;margin:0 0 24px}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--ink);margin-bottom:26px}
+.tab{font:500 12px/1 inherit;letter-spacing:.05em;text-transform:uppercase;
+  padding:11px 17px;border:1px solid transparent;background:none;color:var(--mute);cursor:pointer}
+.tab.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.tab:not(.on):hover{background:#f1efe8}
+.screen{display:none}.screen.on{display:block}
+.eyebrow{font-size:10.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--mute);margin:0 0 9px}
+
+.notecol{width:94%;min-width:360px;max-width:100%}
+textarea{width:100%;padding:14px 16px 10px;background:var(--panel);border:1px solid var(--rule);
+  font:12px/1.65 var(--mono);color:var(--ink);resize:none;overflow:hidden;display:block}
+textarea:focus{outline:2px solid var(--ok);outline-offset:-1px}
+small.cnt{display:block;color:var(--mute);font-size:11.5px;margin-top:7px}
+
+.menu{position:relative;display:inline-block}
+.trigger{display:inline-flex;align-items:center;gap:8px;cursor:pointer;
+  font:500 12.5px inherit;padding:7px 15px;background:var(--panel);
+  border:3px solid var(--purple);border-radius:999px;color:var(--ink)}
+.trigger:hover{background:#f1efe8}
+.trigger:focus-visible{outline:2px solid var(--ok);outline-offset:2px}
+.trigger .cur{color:var(--mute)}
+.trigger .chev{font-size:9px;color:var(--mute);transform:translateY(1px)}
+.card{position:absolute;top:calc(100% + 7px);left:0;z-index:60;
+  min-width:288px;background:var(--panel);border:1px solid var(--rule);
+  border-radius:13px;box-shadow:0 12px 30px rgba(27,31,29,.13),0 2px 6px rgba(27,31,29,.07);
+  padding:7px;display:none}
+.menu-r .card{left:auto;right:0}
+.card.open{display:block}
+.card .hd{font-size:12.5px;color:var(--mute);padding:8px 12px 6px}
+.card .opt{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+  width:100%;text-align:left;background:none;border:0;cursor:pointer;
+  font:14px inherit;color:var(--ink);padding:9px 12px;border-radius:8px}
+.card .opt:hover{background:#f1efe8}
+.card .opt .tickmark{color:var(--ink);font-size:13px;visibility:hidden;flex:none}
+.card .opt[aria-checked="true"] .tickmark{visibility:visible}
+.card .opt small{display:block;color:var(--mute);font-size:11.5px;margin-top:2px}
+
+.bar{display:flex;align-items:center;justify-content:space-between;gap:16px;
+  margin:26px 0 12px;flex-wrap:wrap}
+.runbtn{font:600 13px inherit;padding:11px 22px;background:var(--ink);color:var(--paper);
+  border:1px solid var(--ink);cursor:pointer;letter-spacing:.02em}
+.runbtn:hover{background:#000}
+.runbtn:focus-visible{outline:2px solid var(--ok);outline-offset:2px}
+.selall{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--mute);cursor:pointer}
+
+.runrow{margin:26px 0 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.modesw{display:inline-flex;align-items:center;gap:8px;font:600 13px inherit;cursor:pointer}
+.modesw input{width:15px;height:15px;accent-color:var(--purple)}
+.modehint{font-size:12.5px;color:var(--mute)}
+.progress{margin:0 0 18px;display:flex;align-items:center;gap:12px;max-width:640px}
+.pbar{flex:1;height:6px;background:var(--soft);border-radius:99px;overflow:hidden}
+.pfill{height:100%;width:0;background:var(--purple);transition:width .25s ease}
+.ptext{font:12px var(--mono);color:var(--mute);white-space:nowrap}
+.pickhead{display:flex;align-items:center;justify-content:flex-start;gap:16px;
+  margin-bottom:14px;flex-wrap:wrap}
+.selcard{background:#e8f2ea;border:1px solid #c3ddc9;padding:13px 17px}
+.selcard .selall{color:var(--ink);font:400 14px inherit}
+.selcard .selall input{width:15px;height:15px;accent-color:var(--ok)}
+.selcard .count{margin:7px 0 0;font:700 14px inherit;color:var(--info)}
+.tablebox{border:1px solid var(--rule);background:var(--panel)}
+table.mtab{width:100%;border-collapse:collapse;table-layout:fixed}
+table.mtab th{font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--mute);text-align:left;padding:11px 14px;border-bottom:1px solid var(--ink)}
+table.mtab th.c-eff{width:246px}
+table.mtab th.c-cost{width:118px;text-align:left}
+table.mtab th.c-tier{width:132px;text-align:center;padding-left:0}
+table.mtab td{padding:11px 14px;border-bottom:1px solid var(--soft);vertical-align:middle}
+table.mtab tr:last-child td{border-bottom:0}
+table.mtab tbody tr:hover{background:#faf9f5}
+.pick{display:flex;align-items:flex-start;gap:11px;cursor:pointer}
+.pick input{margin-top:2px;flex:none;width:15px;height:15px;accent-color:var(--ok)}
+.mmeta{display:block;min-width:0}
+.mbtn{display:inline-flex;align-items:center;gap:5px;font:600 13.5px inherit;color:var(--ink);
+  text-decoration:none;background:var(--panel);border:1px solid var(--rule);
+  padding:5px 10px;border-radius:6px;line-height:1.2}
+.mbtn:hover{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.mbtn:focus-visible{outline:2px solid var(--ok);outline-offset:2px}
+.mbtn .ext{font-size:10px;opacity:.65}
+.flag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:3px;
+  font:600 10px inherit;letter-spacing:.04em;text-transform:uppercase;vertical-align:1px}
+.f-dep{background:#f6e2e2;color:var(--bad)}
+.f-intro{background:#e2ecf6;color:var(--info)}
+.mfam{display:block;font-size:12px;color:var(--mute);margin-top:4px}
+.efforts{display:flex;gap:9px;flex-wrap:nowrap}
+.efforts label{font-size:12px;white-space:nowrap;color:var(--ink);display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+.efforts input{accent-color:var(--ok);margin:0}
+.noeffort{font-size:13px;color:var(--mute);font-style:italic}
+.cost{font:13px var(--mono);white-space:nowrap;text-align:left;display:block}
+.tiercell{padding-left:0;text-align:center}
+.tier.tmini{width:auto;padding:2px 7px;font-size:10px;letter-spacing:.06em}
+.tier{display:inline-block;padding:6px 0;width:108px;text-align:center;font-size:11px;font-weight:700;
+  letter-spacing:.07em;text-transform:uppercase;color:#fff}
+.t-Excellent{background:var(--ok)} .t-Great{background:var(--info)}
+.t-Good{background:var(--warn)} .t-Fair{background:var(--bad)}
+.c-lo{color:var(--ok)} .c-mid{color:var(--info)}
+.cost.cheap{font-weight:700}
+.cost{font:11.5px var(--mono);white-space:nowrap}
+
+.srcnote{background:var(--panel);border:1px solid var(--rule);border-left:3px solid var(--ink);
+  padding:16px 20px;font:14px/1.7 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  white-space:pre-wrap;margin:0 0 12px;max-width:820px;color:var(--ink)}
+.srcnote.tiny{font:10.5px/1.55 var(--mono);padding:12px 14px;color:var(--mute);max-width:900px;margin:0}
+.payload{margin:24px 0 0;max-width:900px}
+.exportrow{display:flex;align-items:center;gap:14px;margin:22px 0 0;flex-wrap:wrap}
+.copybtn.small{font-size:11.5px;padding:5px 11px;margin-bottom:8px}
+.copybtn{font:12.5px inherit;padding:7px 14px;background:var(--panel);border:1px solid var(--rule);
+  border-radius:999px;cursor:pointer;color:var(--ink)}
+.copybtn:hover{background:#f1efe8}
+
+.legend{max-width:900px;margin:16px 0 0;font-size:12.5px;line-height:1.6;color:var(--mute)}
+.legend b{color:var(--ink);font-weight:600}
+.notes-panel{max-width:900px;margin:22px 0 0;border-top:1px solid var(--rule);padding-top:16px}
+.notes-panel h2{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--mute);
+  font-weight:600;margin:0 0 12px}
+.nrow{display:flex;gap:14px;padding:8px 0;border-bottom:1px solid var(--soft);font-size:12.5px}
+.nrow b{flex:none;width:170px;font-weight:600}
+.nrow span{color:var(--mute);line-height:1.5}
+.tierkey{display:grid;gap:8px;max-width:900px}
+.tierkey>span{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--mute);line-height:1.45}
+.tierkey .tier{flex:none;width:86px}
+.mwrap{overflow-x:auto;overflow-y:visible}
+table{border-collapse:separate;border-spacing:0;font-size:12px}
+th,td{border-bottom:1px solid var(--soft);border-right:1px solid var(--soft);
+  padding:9px 11px;vertical-align:top;text-align:left}
+th.fieldh,td.fieldc{position:sticky;left:0;background:var(--panel);z-index:2;
+  width:116px;min-width:116px;font-weight:600;font-size:11.5px}
+thead th{background:var(--panel);width:168px;min-width:168px;border-bottom:1px solid var(--ink)}
+thead th.fieldh{z-index:3}
+.hname{font-weight:600;font-size:12.5px;display:block}
+.hlink{font-size:10.5px;color:var(--info);text-decoration:none}
+.hlink:hover{text-decoration:underline}
+.val{font:11.5px/1.5 var(--mono);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;
+  overflow:hidden;position:relative}
+td:hover .val,td:focus-within .val{-webkit-line-clamp:unset;overflow:visible}
+.null{color:var(--clay);font-style:italic;font-family:inherit;font-size:11.5px}
+tbody tr:hover td{background:#faf9f5}
+tbody tr:hover td.fieldc{background:#f4f2ec}
+.sect td{background:var(--soft);font-size:10.5px;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--mute)}
+.sect td.fieldc{background:var(--soft)}
+.score{font:600 12px var(--mono)}
+.ratio{font:11px var(--mono);color:var(--mute)}
+.chip{display:inline-block;margin-top:4px;padding:1px 6px;border-radius:3px;
+  font:600 9.5px inherit;letter-spacing:.05em;text-transform:uppercase}
+.c-ok{background:#e3f0e7;color:var(--ok)} .c-err{background:#f6e2e2;color:var(--bad)}
+.c-warn{background:#f6efdc;color:var(--warn)} .c-wait{background:var(--soft);color:var(--mute)}
+.pendcell{color:var(--mute);font-style:italic;font-size:11.5px}
+.errcell{color:var(--bad);font-style:italic;font-size:11.5px}
+.s-ok{color:var(--ok)} .s-warn{color:var(--warn)} .s-bad{color:var(--bad)}
+@media (max-width:700px){
+  .notecol{width:100%;min-width:0}
+  body{padding:18px 14px 70px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Note Extraction Bench</h1>
+<p class="sub">Paste one messy job note. Run it through several models. Compare what each one pulled out.</p>
+
+<div class="tabs" role="tablist">
+  <button class="tab on" onclick="go('in',this)">Input</button>
+  <button class="tab" onclick="go('out',this)">Results</button>
+</div>
+
+<!-- ===================== INPUT ===================== -->
+<section class="screen on" id="in">
+  <p class="eyebrow">Job note</p>
+  <div class="notecol">
+    <textarea id="note" spellcheck="false" oninput="fit(this)">cust jenna marlow - 442 old quarry rd, unit b - jmarlow88@gmail.com - cell 5 5 5 . 2 0 4 . 7 7 3 1 (best after 4)
+4 trees back fence line. 2 big silver maples maybe 60-70ft, one leaning bad over the shed. also a dead ash ~30ft and a smaller oak she wants shaped not removed.
+opt A full removal both maples + ash, stump grind incl, 4800. opt B removal ash only + crown reduce maples 2600. opt C ash + shed-side maple, leave the other, 3400 - she liked this one but wants to think
+oak shaping either way +450
+cant do weekdays before 9, neighbor works nights. power line runs thru the ash side, need to call utility for a drop. bring the chipper, no street access - has to come thru the side gate 8ft wide
+told her 2-3 wks out. deposit 30% to book</textarea>
+    <small class="cnt" id="cnt"></small>
+  </div>
+
+  <div class="runrow">
+    <button class="runbtn" id="runbtn" onclick="run()">Run extraction</button>
+    <label class="modesw" title="Live calls your own /api/extract endpoint on Vercel. Demo uses built-in example data and costs nothing.">
+      <input type="checkbox" id="live" onchange="setMode(this.checked)"> Live API
+    </label>
+    <span class="modehint" id="modehint">Demo data — no API calls, no cost</span>
+  </div>
+  <div class="progress" id="progress" hidden>
+    <div class="pbar"><div class="pfill" id="pfill"></div></div>
+    <span class="ptext" id="ptext"></span>
+  </div>
+
+  <div class="pickhead">
+    <div class="selcard">
+      <label class="selall"><input type="checkbox" id="all" onchange="toggleAll()"> Select all models</label>
+      <p class="count" id="selcount"></p>
+    </div>
+    <div class="menu" id="m1">
+      <button class="trigger" onclick="pop('m1')" aria-haspopup="true">
+        Sort <span class="cur" id="lab1">Highest ranked</span><span class="chev">&#9660;</span>
+      </button>
+      <div class="card" id="card1"></div>
+    </div>
+  </div>
+  <p class="legend" style="margin:0 0 10px">
+    Model names link to that provider's chat interface. <b>Effort cannot be set by URL on any provider</b> —
+    it is a per-account setting, so the link opens the model and the tooltip states which effort step to select.
+    Prices are standard short-context rates verified 18 July 2026; Batch halves both sides, and Gemini Pro
+    doubles above 200K input tokens.
+  </p>
+  <div class="tablebox">
+    <table class="mtab">
+      <thead><tr>
+        <th>Model</th><th class="c-eff">Effort</th>
+        <th class="c-cost">Cost in / out</th><th class="c-tier">Extraction/Accuracy</th>
+      </tr></thead>
+      <tbody id="models"></tbody>
+    </table>
+  </div>
+
+  <div class="notes-panel">
+    <h2>What "Extraction/Accuracy" measures</h2>
+    <p class="legend" style="margin:0 0 12px">
+      It grades how reliably a model pulls <b>defined fields out of text that contains all the
+      information but none of the structure</b> — run-on notes, shorthand, inconsistent labels, facts
+      stated once in passing. It rewards schema discipline and careful reading rather than raw
+      intelligence, and the two do not track each other: on FormationEval's 72-model leaderboard,
+      GLM-4.7 at $0.40/$1.50 placed 2nd and Kimi K2 Thinking placed 7th, both above Claude Opus 4.5
+      at twelve times the price.
+    </p>
+    <div class="tierkey">
+      <span><span class="tier tmini t-Excellent">Excellent</span> Reliable schema adherence, strong grounding, handles inference from context.</span>
+      <span><span class="tier tmini t-Great">Great</span> Solid extraction with a known weakness or thinner independent evidence.</span>
+      <span><span class="tier tmini t-Good">Good</span> Workable, but likely to drop fields that require inference.</span>
+      <span><span class="tier tmini t-Fair">Fair</span> Control floor only — expect dropped sub-fields and silent failures.</span>
+    </div>
+    <h2 style="margin-top:20px">Where these grades come from</h2>
+    <p class="legend" style="margin:0">
+      <b>Tiers</b> — <b>ExtractBench</b> (Ferguson et al. 2026; 35 documents, 12,867 fields; failure-mode
+      taxonomy), <b>FormationEval</b> (72-model leaderboard with cost columns), <b>LLMStructBench</b>
+      (Tenckhoff et al. 2026; 22 models, five prompting strategies), <b>JSONSchemaBench</b> (Geng et al.
+      2025) and the <b>Structured Output Benchmark</b>. Full analysis in <b>aiAssessmentCapability.md</b>.<br>
+      <b>Prices and availability</b> — verified 18 July 2026 against each provider's own pricing and
+      model documentation, not third-party aggregators. See <b>openaiModels.md</b> for the OpenAI audit.<br>
+      <b>The caveat that matters</b> — none of these benchmarks tests this task on these documents. They
+      measure extraction from PDFs, research papers and safety sheets; the transfer to arborist notes is
+      an assumption, not a result. Every tier is a hypothesis your own runs will confirm or overturn,
+      which is what this bench is for.
+    </p>
+  </div>
+</section>
+
+<!-- ===================== RESULTS ===================== -->
+<section class="screen" id="out">
+  <h1 style="font-size:20px">Extracted fields from different models</h1>
+
+  <p class="eyebrow">Source note</p>
+  <pre class="srcnote" id="srcnote"></pre>
+  <button class="copybtn" id="cp" onclick="copyNote()">Copy note &amp; model extraction instructions</button>
+
+  <div class="bar">
+    <span class="eyebrow" style="margin:0" id="runmeta"></span>
+    <div class="menu menu-r" id="m2">
+      <button class="trigger" onclick="pop('m2')" aria-haspopup="true">
+        Sort <span class="cur" id="lab2">Highest ranked</span><span class="chev">&#9660;</span>
+      </button>
+      <div class="card" id="card2"></div>
+    </div>
+  </div>
+
+  <div class="tablebox mwrap"><table id="matrix"></table></div>
+
+  <p class="legend">
+    Each row is one field, each column one model. The left column stays put as you scroll sideways.
+    <b>Null rate</b> is empty fields over total fields. A model can agree with everyone on the few things
+    it answered and still have left half the form blank, so read it next to the agreement score, not instead of it.
+    Clay italic marks a field the model returned empty. Hover any value longer than three lines to expand it.
+  </p>
+
+  <div class="exportrow">
+    <button class="copybtn" onclick="exportCSV()">Download bench_log.csv</button>
+    <span class="modehint">Appends this run to a 25-column log — one row per model, the schema from SETUP.md</span>
+  </div>
+
+  <div class="payload">
+    <p class="eyebrow" style="margin-bottom:8px">Note with instructions to models — what to extract</p>
+    <button class="copybtn small" id="cp2" onclick="copyNote('cp2')">Copy note &amp; model extraction instructions</button>
+    <pre class="srcnote tiny" id="payload"></pre>
+  </div>
+
+  <div class="notes-panel">
+    <h2>Why these models are graded as they are</h2>
+    <div id="notes"></div>
+    <p class="legend" style="margin-top:14px">
+      Grades come from extraction benchmarks run on PDFs, research papers, and safety sheets &mdash; not on
+      arborist notes. Treat every tier as a hypothesis your own runs will confirm or overturn.
+      Full sourcing in <b>aiAssessmentCapability.md</b>.
+    </p>
+  </div>
+</section>
+</div>
+
+<script>
+/* ---------------- model catalogue ---------------- */
+const EFF={
+  Anthropic:['low','medium','high','xhigh','max'],   // default: high
+  OpenAI:['low','medium','high','xhigh'],            // 5.6 adds xhigh; 'max' is a settings toggle
+  Google:['low','medium','high'],
+  xAI:['low','medium','high'],
+  _:['low','medium','high']
+};
+const EFFDEF={Anthropic:'high',OpenAI:'medium',_:'medium'};
+const effOf=f=>EFF[f]||EFF._;
+const effDefault=f=>EFFDEF[f]||EFFDEF._;
+const M=[
+ // name, family, tier, in$/M, out$/M, effort?, site
+ // name, family, tier, in, out, effort?, site, note, status
+ ['Sonnet 4.6','Anthropic','Excellent',3.00,15.00,1,'https://claude.ai','Joint-best validity on ExtractBench\'s hardest text domain (83%). Trailing-comma risk only on very wide schemas.',''],
+ ['Sonnet 5','Anthropic','Excellent',3.00,15.00,1,'https://claude.ai','Standard rate $3/$15; introductory $2/$10 runs to 31 Aug 2026. Same family profile as 4.6 but newer — verify on your own notes.','intro'],
+ ['Opus 4.8','Anthropic','Excellent',5.00,25.00,1,'https://claude.ai','Strongest Claude on complex instructions. Doubtful the premium buys anything at sixteen fields — test against Sonnet.',''],
+ ['Fable 5','Anthropic','Great',10.00,50.00,1,'https://claude.ai','Corrected from $5/$25 — Fable 5 is $10/$50, the most expensive Claude. Little published extraction data.',''],
+ ['Haiku 4.5','Anthropic','Great',1.00,5.00,0,'https://claude.ai','Claude schema discipline in a small fast model. Anthropic names extraction as a core Haiku use case.',''],
+ ['Gemini 3.1 Pro','Google','Excellent',2.00,12.00,1,'https://gemini.google.com','Verified $2/$12 under 200K tokens, rising to $4/$18 above. Tops FormationEval at 99.8%; Gemini 3 Pro showed the empty-response failure.',''],
+ ['Gemini 3.5 Flash','Google','Great',1.50,9.00,1,'https://gemini.google.com','Now recommended over 3.1 Pro as Google\'s default unless you need the larger context. Flash-class tied Claude for best ExtractBench validity.',''],
+ ['Gemini 3.1 Flash-Lite','Google','Good',0.25,1.50,1,'https://gemini.google.com','Google\'s volume floor. Explicit labelled fields only; a cheap control that is not embarrassing.',''],
+ ['Qwen3-Max','Alibaba','Excellent',1.20,6.00,0,'https://chat.qwen.ai','Best value in this band. Open-weight Chinese models beat their price tier on every leaderboard reviewed.',''],
+ ['Grok 4.5','xAI','Excellent',2.00,6.00,1,'https://grok.com','Grok 4.1 Fast hit 97.6% on FormationEval at a twentieth of flagship cost. Thinner independent evidence.',''],
+ ['Qwen 3.6 Max-Preview','Alibaba','Great',0.40,1.20,0,'https://chat.qwen.ai','Near-flagship extraction at a twelfth of the price. "Preview" means behaviour may shift without notice.',''],
+ ['Kimi K2.6','Moonshot','Great',0.50,1.50,0,'https://kimi.moonshot.cn','K2 Thinking placed 7th of 72 on FormationEval, above Opus 4.5. Promoted from Good on that evidence.',''],
+ ['GLM-5.1','Zhipu','Great',0.60,2.00,0,'https://chatglm.cn','GLM-4.7 placed 2nd of 72 at 98.6%, beating models costing ten times more. Open weights allow self-hosting.',''],
+ ['GPT-5.6 Sol','OpenAI','Great',5.00,30.00,1,'https://chatgpt.com','GA since 9 July 2026 — the openaiModels.md "not on the model list" finding is out of date. $5/$30 confirmed.',''],
+ ['GPT-5.6 Terra','OpenAI','Great',2.50,15.00,1,'https://chatgpt.com','Corrected from $1.25/$7.50, which was the Batch rate. Standard is $2.50/$15 — GPT-5.5 performance at half the cost.',''],
+ ['GPT-5.6 Luna','OpenAI','Good',1.00,6.00,1,'https://chatgpt.com','Cheapest of the 5.6 tier at $1/$6. Handles explicit fields well; drops fields needing inference.',''],
+ ['GPT-5.4','OpenAI','Great',2.50,15.00,1,'https://chatgpt.com','Exactly half of GPT-5.5 on both sides. The sensible OpenAI default for extraction at this schema size.',''],
+ ['GPT-5.5','OpenAI','Good',5.00,30.00,1,'https://chatgpt.com','Twice 5.4\'s output cost for gains you are unlikely to see on sixteen fields.',''],
+ ['GPT-5.4 mini','OpenAI','Great',0.38,2.25,1,'https://chatgpt.com','Best value in the OpenAI lineup for extraction — a seventh of 5.4\'s output cost. Expect dropped sub-fields.',''],
+ ['GPT-4.1','OpenAI','Great',2.00,8.00,0,'https://chatgpt.com','Smartest non-reasoning OpenAI model. For extraction the absence of reasoning is barely a handicap.',''],
+ ['GPT-5.4 nano','OpenAI','Fair',0.20,1.25,0,'https://chatgpt.com','Corrected from $0.10/$0.63 — actual is $0.20/$1.25. Cheapest current-gen OpenAI. Use as control floor.',''],
+ ['GPT-5.5 pro','OpenAI','Good',30.00,180.00,1,'https://chatgpt.com','Corrected from $5/$30 — actual is $30/$180, a 6x error. Impossible to justify for field extraction.',''],
+ ['DeepSeek V4PLUS','DeepSeek','Great',0.55,2.20,1,'https://chat.deepseek.com','Competitive at low cost, but less extraction-specific evidence than Qwen or GLM at similar pricing.',''],
+ ['DeepSeek V4 Flash','DeepSeek','Fair',0.14,0.28,0,'https://chat.deepseek.com','Cheapest option here. Expect missed options and dropped qualifiers.',''],
+ ['o4-mini','OpenAI','Good',0.55,2.20,1,'https://chatgpt.com','DEPRECATED — superseded by GPT-5 mini, retired from ChatGPT Feb 2026. Do not build a re-runnable benchmark on it.','dep'],
+ ['4.1 Nano','OpenAI','Fair',0.10,0.63,0,'https://chatgpt.com','DEPRECATED — superseded within the GPT-4.1 line. Keep only as a labelled floor control.','dep']
+].map((r,i)=>({i,name:r[0],fam:r[1],tier:r[2],cin:r[3],cout:r[4],eff:!!r[5],site:r[6],note:r[7],status:r[8]||'',effort:(EFFDEF[r[1]]||EFFDEF._)}));
+
+const API_ID={
+ "Sonnet 4.6": "sonnet-4-6",
+ "Sonnet 5": "sonnet-5",
+ "Opus 4.8": "opus-4-8",
+ "Fable 5": "fable-5",
+ "Haiku 4.5": "haiku-4-5",
+ "Gemini 3.1 Pro": "gemini-3-1-pro",
+ "Gemini 3.5 Flash": "gemini-3-5-flash",
+ "Gemini 3.1 Flash-Lite": "gemini-3-1-fl",
+ "Qwen3-Max": "qwen3-max",
+ "Grok 4.5": "grok-4-5",
+ "Qwen 3.6 Max-Preview": "qwen-3-6-max",
+ "Kimi K2.6": "kimi-k2-6",
+ "GLM-5.1": "glm-5-1",
+ "GPT-5.6 Sol": "gpt-5-6-sol",
+ "GPT-5.6 Terra": "gpt-5-6-terra",
+ "GPT-5.6 Luna": "gpt-5-6-luna",
+ "GPT-5.4": "gpt-5-4",
+ "GPT-5.5": "gpt-5-5",
+ "GPT-5.4 mini": "gpt-5-4-mini",
+ "GPT-4.1": "gpt-4-1",
+ "GPT-5.4 nano": "gpt-5-4-nano",
+ "GPT-5.5 pro": "gpt-5-5-pro",
+ "DeepSeek V4PLUS": "deepseek-v4plus",
+ "DeepSeek V4 Flash": "deepseek-v4-fl",
+ "o4-mini": "o4-mini",
+ "4.1 Nano": "gpt-4-1-nano"
+};
+M.forEach(m=>m.aid=API_ID[m.name]);
+
+const TIER={Excellent:0,Great:1,Good:2,Fair:3};
+// Effort is a per-account UI setting on every provider - none accept it as a URL
+// parameter. ChatGPT's legacy ?model= is the only documented deep link and is
+// unreliable. We link to the model where we can and state the effort step in the tooltip.
+function deepLink(m){
+  if(m.fam==='OpenAI'){
+    const id=m.name.toLowerCase().replace(/^gpt-/,'gpt-').replace(/\s+/g,'-');
+    return `${m.site}/?model=${encodeURIComponent(id)}`;
+  }
+  return m.site;
+}
+function linkHint(m){
+  const where={OpenAI:'model picker, then the effort control under it',
+    Anthropic:'model picker in the sidebar, effort dial beside it',
+    Google:'model dropdown at top of the prompt box',
+    xAI:'model selector in the composer'}[m.fam]||'model selector';
+  return m.eff
+    ? `Opens ${m.fam} — set effort to "${m.effort}" in the ${where}. Effort cannot be set by URL.`
+    : `Opens ${m.fam}. This model has no effort setting.`;
+}
+const FAMRANK=f=>f==='OpenAI'?'':f;
+
+const SORTS=[
+ ['rank','Highest ranked','Tier, then cheapest output tokens'],
+ ['cheap','Cheapest output tokens','Lowest cost per million out'],
+ ['exp','Most expensive output tokens','Highest cost per million out'],
+ ['famcap','By family — highest capability','OpenAI first, then A–Z; best tier within each'],
+ ['famcost','By family — lowest output cost','Grouped by family, cheapest first']
+];
+const DEFAULTS=['Sonnet 4.6','Gemini 3.1 Pro','Qwen3-Max','GLM-5.1','GPT-5.4 nano'];
+let sort='rank', sel=new Set(M.filter(m=>DEFAULTS.includes(m.name)).map(m=>m.i));
+
+function sorted(){
+  const a=M.slice();
+  const byTier=(x,y)=>TIER[x.tier]-TIER[y.tier]||x.cout-y.cout;
+  if(sort==='rank')a.sort(byTier);
+  if(sort==='cheap')a.sort((x,y)=>x.cout-y.cout);
+  if(sort==='exp')a.sort((x,y)=>y.cout-x.cout);
+  if(sort==='famcap')a.sort((x,y)=>FAMRANK(x.fam).localeCompare(FAMRANK(y.fam))||byTier(x,y));
+  if(sort==='famcost')a.sort((x,y)=>FAMRANK(x.fam).localeCompare(FAMRANK(y.fam))||x.cout-y.cout);
+  return a;
+}
+const ccls=v=>(v<6?'c-lo cheap':(v<10?'c-mid':''));
+
+/* ---------------- input screen ---------------- */
+function drawModels(){
+  document.getElementById('models').innerHTML=sorted().map(m=>{
+    const lv=effOf(m.fam);
+    return `<tr>
+     <td><label class="pick">
+       <input type="checkbox" ${sel.has(m.i)?'checked':''} onchange="pick(${m.i},this.checked)">
+       <span class="mmeta">
+         <a class="mbtn" href="${deepLink(m)}" target="_blank" rel="noopener"
+            title="${linkHint(m)}" onclick="event.stopPropagation()">${m.name} <span class="ext">&#8599;</span></a>
+         <span class="mfam">${m.fam}${m.status==='dep'?' <span class="flag f-dep">deprecated</span>':''}${m.status==='intro'?' <span class="flag f-intro">intro pricing</span>':''}</span>
+       </span>
+     </label></td>
+     <td>${m.eff
+       ?`<span class="efforts">${lv.map(e=>`<label><input type="radio" name="e${m.i}" value="${e}" ${m.effort===e?'checked':''} onchange="M[${m.i}].effort='${e}'">${e}</label>`).join('')}</span>`
+       :`<span class="noeffort">no effort setting</span>`}</td>
+     <td><span class="cost ${ccls(m.cout)}">$${m.cin.toFixed(2)} / $${m.cout.toFixed(2)}</span></td>
+     <td class="tiercell"><span class="tier t-${m.tier}">${m.tier}</span></td>
+   </tr>`;}).join('');
+  document.getElementById('all').checked=sel.size===M.length;
+  document.getElementById('selcount').textContent=`Models — ${sel.size} of ${M.length} selected`;
+}
+function pick(i,on){on?sel.add(i):sel.delete(i);drawModels();}
+function toggleAll(){
+  const on=document.getElementById('all').checked;
+  sel=on?new Set(M.map(m=>m.i)):new Set();
+  drawModels();
+}
+
+/* ---------------- sort popovers ---------------- */
+function drawCards(){
+  [['card1','lab1'],['card2','lab2']].forEach(([c,l])=>{
+    document.getElementById(c).innerHTML=`<div class="hd">Sort models by</div>`+
+      SORTS.map(s=>`<button class="opt" role="menuitemradio" aria-checked="${sort===s[0]}"
+        onclick="setSort('${s[0]}')"><span>${s[1]}<small>${s[2]}</small></span>
+        <span class="tickmark">&#10003;</span></button>`).join('');
+    document.getElementById(l).textContent=SORTS.find(s=>s[0]===sort)[1];
+  });
+}
+function pop(id){
+  const c=document.querySelector('#'+id+' .card'), was=c.classList.contains('open');
+  document.querySelectorAll('.card').forEach(x=>x.classList.remove('open'));
+  if(!was)c.classList.add('open');
+}
+document.addEventListener('click',e=>{if(!e.target.closest('.menu'))
+  document.querySelectorAll('.card').forEach(x=>x.classList.remove('open'));});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')
+  document.querySelectorAll('.card').forEach(x=>x.classList.remove('open'));});
+function setSort(s){sort=s;drawCards();drawModels();if(ran)drawMatrix();
+  document.querySelectorAll('.card').forEach(x=>x.classList.remove('open'));}
+
+/* ---------------- schema + example extractions ---------------- */
+const ROWS=[
+ ['Contact','sect'],
+ ['name','Name'],['addr','Address'],['mail','Email'],['ph','Phone'],
+ ['Trees & work','sect'],
+ ['trees','Tree count'],['size','Sizes'],['sp','Species'],['work','Work scope'],
+ ['opts','Options'],['prices','Prices'],
+ ['Notes','sect'],
+ ['notes','Site notes'],['sched','Scheduling'],['warn','Hazards'],
+ ['Scoring','sect'],
+ ['nullrate','Null rate'],['agree','Agreement'],['chal','Challenge']
+];
+const SCORED=['name','addr','mail','ph','trees','size','sp','work','opts','prices','notes','sched','warn'];
+const DIAG=[['Run','sect'],['lat','Latency'],['tok','Tokens in/out'],['spend','Cost']];
+const FIELDHELP={
+  name:"customer's full name",
+  addr:'street address including any unit or apartment number',
+  mail:'email address',
+  ph:'phone number, plus any stated best time to call',
+  trees:'how many trees are involved',
+  size:'height and trunk width of each tree where stated',
+  sp:'species of each tree',
+  work:'what work is to be done',
+  opts:'how many distinct quoted options were offered',
+  prices:'the price of each option, and any add-on prices',
+  notes:'access constraints, equipment needs, site conditions',
+  sched:'availability windows, lead time, deposit terms',
+  warn:'anything requiring a safety precaution or third party'
+};
+const LABEL=Object.fromEntries(ROWS.filter(r=>r[1]!=='sect'));
+function instructionBlock(){
+  const w=Math.max(...SCORED.map(f=>LABEL[f].length));
+  return 'The source of truth is the note above. Extract the following fields, and return\n'
+    +'nothing that is not supported by that text. If a field is not present, return null\n'
+    +'rather than guessing.\n\n'
+    +SCORED.map(f=>'  '+LABEL[f].padEnd(w)+'  - '+FIELDHELP[f]).join('\n');
+}
+const fullPayload=()=>runNote.trim()+'\n\n---\n\n'+instructionBlock();
+
+const FULL={
+  name:'Jenna Marlow', addr:'442 Old Quarry Rd, Unit B',
+  mail:'jmarlow88@gmail.com', ph:'(555) 204-7731',
+  trees:'3 oaks + 1 maple', size:'Leaning oak ~60 ft, ~3 ft trunk; other two mid-size',
+  sp:'Oak (3), Silver maple (1)',
+  work:'Remove or reduce three rear oaks; maple assessed separately',
+  opts:'3', prices:'$2,400 / $1,950 / $3,100',
+  notes:'Narrow gate, no truck access from the alley side',
+  sched:'Away until the 8th, done before the 20th, weekday mornings, no Saturday',
+  warn:'Power line through drip line of leaning oak - no climb before utility drop; loose dog next door',
+  chal:'Customer says "maybe 4 trees total" but itemises three oaks plus a separately quoted maple.'
+};
+const VAR={
+ 'Grok 4.5':{trees:'4', chal:'Took "maybe 4 trees total" at face value.'},
+ 'GPT-5.6 Sol':{size:'Leaning oak ~60 ft', chal:'Trunk width given loosely as "3ft across".'},
+ 'Gemini 3.1 Pro':{sched:'Before the 20th, weekday mornings', chal:'Return date "the 8th" has no month.'},
+ 'Haiku 4.5':{size:'Large leaning oak, two mid-size', work:'Oak removal or crown reduction'},
+ 'Fable 5':{chal:'Clean pass; no ambiguity flagged.'},
+ 'GPT-5.4':{chal:'Option labels read consistently.'},
+ 'GPT-5.6 Luna':{chal:'Option labels shift between "opt" and "option".'},
+ 'GPT-5.6 Terra':{sched:'Weekday mornings before the 20th'},
+ 'GPT-4.1':{size:null, chal:'Trunk width dropped.'},
+ 'GPT-5.5':{size:null, chal:'Trunk width dropped.'},
+ 'GPT-5.5 pro':{size:null},
+ 'Gemini 3.5 Flash':{size:'~60 ft', chal:'Sizes only given for one tree.'},
+ 'DeepSeek V4PLUS':{work:'Tree removal and crown reduction'},
+ 'Qwen 3.6 Max-Preview':{size:null},
+ 'Kimi K2.6':{size:null, sched:'Before the 20th', chal:'Scheduling spread across two sentences.'},
+ 'GLM-5.1':{size:null, work:'Tree work on oaks'},
+ 'o4-mini':{size:null, sched:'Weekday morning'},
+ 'GPT-5.4 mini':{addr:'442 Old Quarry Rd', ph:'5552047731', trees:'4', size:null,
+             sp:'Oak', work:null, notes:'Narrow gate', sched:null,
+             warn:'Power line near tree', chal:'Spaced phone digits and shifting option labels.'},
+ 'DeepSeek V4 Flash':{addr:'442 Old Quarry Rd', size:null, sp:'Oak', work:null,
+             prices:'$2,400 / $1,950', opts:'2', sched:null,
+             chal:'Third option written with "=" rather than a dash was missed.'},
+ '4.1 Nano':{name:null,addr:null,mail:null,ph:null,trees:null,size:null,sp:null,work:null,
+             opts:null,prices:null,notes:null,sched:null,warn:null,
+             chal:'Returned prose instead of JSON - nothing parsed.'},
+ 'GPT-5.4 nano':{size:null, sp:'Oak', work:null, sched:null, notes:'Narrow gate',
+             chal:'Dropped every field that needed inference from context.'}
+};
+function extractFor(m){
+  const d=Object.assign({},FULL), v=VAR[m.name];
+  if(v)Object.assign(d,v);
+  return d;
+}
+function score(rows,models){
+  models=models.filter(m=>rows[m.i]);
+  const cons={};
+  SCORED.forEach(f=>{
+    const tally={};
+    models.forEach(m=>{const v=rows[m.i][f];if(v!=null)tally[v]=(tally[v]||0)+1;});
+    cons[f]=Object.keys(tally).sort((x,y)=>tally[y]-tally[x])[0];
+  });
+  const out={};
+  models.forEach(m=>{
+    const d=rows[m.i];
+    const miss=SCORED.filter(f=>d[f]==null).length;
+    const ans=SCORED.filter(f=>d[f]!=null);
+    const hit=ans.filter(f=>d[f]===cons[f]).length;
+    out[m.i]={miss,total:SCORED.length,
+      nullrate:Math.round(miss/SCORED.length*100),
+      agree:ans.length?Math.round(hit/ans.length*100):0};
+  });
+  return out;
+}
+const scls=(v,inv)=>{
+  if(inv)return v===0?'s-ok':(v<35?'s-warn':'s-bad');
+  return v>=90?'s-ok':(v>=70?'s-warn':'s-bad');
+};
+
+/* ---------------- run + matrix ---------------- */
+let ran=false, results=null, runNote='', live=false, running=false;
+
+function setMode(on){
+  live=on;
+  document.getElementById('modehint').textContent = on
+    ? 'Live — each selected model is one billed API call'
+    : 'Demo data — no API calls, no cost';
+}
+
+function progress(done,total,label){
+  const p=document.getElementById('progress');
+  p.hidden = done>=total && !running;
+  document.getElementById('pfill').style.width = total? (done/total*100)+'%' : '0%';
+  document.getElementById('ptext').textContent = label || `${done} / ${total} models`;
+}
+
+/* One request per model, all in flight at once. Each resolves independently so
+   a slow or failing model never blocks the rest — the matrix fills in as they land. */
+async function callModel(m, payload){
+  const t0=performance.now();
+  try{
+    const r=await fetch('/api/extract',{
+      method:'POST', headers:{'content-type':'application/json'},
+      body:JSON.stringify({payload, modelId:m.aid, effort:m.eff?m.effort:undefined})
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    if(!j.ok) throw new Error(j.error||'unknown error');
+    return {fields:j.fields, usage:j.usage||{in:0,out:0}, latency:j.latencyMs??Math.round(performance.now()-t0),
+            parseError:j.parseError||null, raw:j.rawText};
+  }catch(e){
+    return {error:String(e.message||e), latency:Math.round(performance.now()-t0),
+            fields:Object.fromEntries(SCORED.map(f=>[f,null])), usage:{in:0,out:0}};
+  }
+}
+
+async function run(){
+  if(running)return;
+  if(!sel.size){alert('Pick at least one model first.');return;}
+  const models=M.filter(m=>sel.has(m.i));
+  if(sel.size===M.length && !confirm(`All ${M.length} models selected. In live mode that is ${M.length} billed API calls for this note. Continue?`))return;
+
+  runNote=document.getElementById('note').value;
+  document.getElementById('srcnote').textContent=runNote;
+  document.getElementById('payload').textContent=fullPayload();
+
+  if(!live){                      // demo path: instant, from built-in data
+    const rows={};
+    models.forEach(m=>rows[m.i]={fields:extractFor(m),usage:{in:1100,out:420},latency:900+m.i*40});
+    finish(models,rows,'demo');
+    go('out',document.querySelectorAll('.tab')[1]);
+    return;
+  }
+
+  running=true;
+  const btn=document.getElementById('runbtn');
+  btn.disabled=true; btn.textContent='Running…';
+  go('out',document.querySelectorAll('.tab')[1]);
+
+  const payload=fullPayload(), rows={};
+  let done=0;
+  progress(0,models.length,'contacting '+models.length+' models…');
+
+  await Promise.all(models.map(async m=>{
+    rows[m.i]=await callModel(m,payload);
+    done++;
+    progress(done,models.length);
+    finish(models,rows,'live',true);      // re-render as each one lands
+  }));
+
+  running=false;
+  btn.disabled=false; btn.textContent='Run extraction';
+  finish(models,rows,'live');
+  progress(models.length,models.length,'done');
+  setTimeout(()=>{document.getElementById('progress').hidden=true;},1200);
+}
+
+function finish(models,rows,mode,partial){
+  const fieldsOnly={};
+  models.forEach(m=>{ if(rows[m.i]) fieldsOnly[m.i]=rows[m.i].fields; });
+  const present=models.filter(m=>rows[m.i]);
+  results={
+    rows:fieldsOnly, meta:rows, models, mode,
+    scores:score(fieldsOnly,present),
+    cost:present.reduce((s,m)=>s+(rows[m.i].usage.in*m.cin + rows[m.i].usage.out*m.cout)/1e6,0),
+    latency:present.length?Math.max(...present.map(m=>rows[m.i].latency)):0,
+    pending:models.length-present.length
+  };
+  ran=true;
+  document.getElementById('runmeta').textContent =
+    `${present.length}/${models.length} models · ${mode==='demo'?'demo data':'$'+results.cost.toFixed(4)} · ${results.latency} ms`
+    + (results.pending?` · ${results.pending} pending`:'');
+  drawMatrix();
+}
+
+function statusChip(m){
+  const meta=results.meta&&results.meta[m.i];
+  if(!meta)return '<span class="chip c-wait">waiting</span>';
+  if(meta.error)return '<span class="chip c-err">error</span>';
+  if(meta.parseError)return '<span class="chip c-warn">bad JSON</span>';
+  return '<span class="chip c-ok">ok</span>';
+}
+function drawMatrix(){
+  if(!ran)return;
+  const order=sorted().filter(m=>sel.has(m.i));
+  let h='<thead><tr><th class="fieldh">Field</th>'+order.map(m=>`
+     <th><span class="hname">${m.name}</span>
+       <span class="tier tmini t-${m.tier}" title="${m.note.replace(/"/g,'&quot;')}">${m.tier}</span><br>
+       <span class="cost ${ccls(m.cout)}">$${m.cin.toFixed(2)} / $${m.cout.toFixed(2)}</span><br>
+       <a class="hlink" href="${m.site}" target="_blank" rel="noopener">${m.fam} &#8599;</a>
+       ${statusChip(m)}</th>`).join('')+'</tr></thead><tbody>';
+  ROWS.concat(DIAG).forEach(r=>{
+    if(r[1]==='sect'){h+=`<tr class="sect"><td class="fieldc">${r[0]}</td>`+
+      order.map(()=>'<td></td>').join('')+'</tr>';return;}
+    const [k,label]=r;
+    h+=`<tr><td class="fieldc">${label}</td>`+order.map(m=>{
+      const meta=results.meta&&results.meta[m.i];
+      if(!meta)return '<td><span class="pendcell">waiting…</span></td>';
+      if(meta.error)return `<td><span class="errcell" title="${String(meta.error).replace(/"/g,'&quot;')}">call failed</span></td>`;
+      const sc=results.scores[m.i]||{nullrate:0,agree:0,miss:0,total:SCORED.length};
+      if(k==='lat')  return `<td><span class="val">${meta.latency} ms</span></td>`;
+      if(k==='tok')  return `<td><span class="val">${meta.usage.in} / ${meta.usage.out}</span></td>`;
+      if(k==='spend'){const c=(meta.usage.in*m.cin+meta.usage.out*m.cout)/1e6;
+        return `<td><span class="val">$${c.toFixed(5)}</span></td>`;}
+      if(k==='nullrate')return `<td><span class="score ${scls(sc.nullrate,true)}">${sc.nullrate}%</span> <span class="ratio">${sc.miss}/${sc.total}</span></td>`;
+      if(k==='agree')return `<td><span class="score ${scls(sc.agree)}">${sc.agree}%</span></td>`;
+      const v=results.rows[m.i][k];
+      if(v==null)return `<td><span class="null">not returned</span></td>`;
+      const t=String(v).replace(/"/g,'&quot;');
+      return `<td tabindex="0" title="${t}"><span class="val">${v}</span></td>`;
+    }).join('')+'</tr>';
+  });
+  document.getElementById('matrix').innerHTML=h+'</tbody>';
+  document.getElementById('notes').innerHTML=order.map(m=>
+    `<div class="nrow"><b>${m.name}</b><span>${m.note}</span></div>`).join('');
+}
+
+/* ---------------- misc ---------------- */
+function go(id,btn){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.id===id));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t===btn));
+  window.scrollTo(0,0);
+}
+function fit(t){t.style.height='0px';t.style.height=(t.scrollHeight+2)+'px';
+  document.getElementById('cnt').textContent=t.value.length+' characters';}
+function exportCSV(){
+  if(!ran){alert('Run an extraction first.');return;}
+  const cols=['timestamp','note_id','model','effort'].concat(SCORED)
+    .concat(['nullrate','agree','chal','tokens_in','tokens_out','cost','latency_ms','scoring_method']);
+  const q=v=>{const t=v==null?'':String(v);
+    return /[",\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t;};
+  const noteId='note_'+Math.abs([...runNote].reduce((h,c)=>((h<<5)-h+c.charCodeAt(0))|0,0)).toString(36);
+  const stamp=new Date().toISOString();
+  const lines=[cols.join(',')];
+  sorted().filter(m=>sel.has(m.i)).forEach(m=>{
+    const meta=results.meta[m.i]; if(!meta)return;
+    const sc=results.scores[m.i]||{}, f=meta.fields||{};
+    const cost=(meta.usage.in*m.cin+meta.usage.out*m.cout)/1e6;
+    lines.push([stamp,noteId,m.name,m.eff?m.effort:'n/a']
+      .concat(SCORED.map(k=>f[k]))
+      .concat([sc.nullrate??'',sc.agree??'',f.chal||'',meta.usage.in,meta.usage.out,
+               cost.toFixed(6),meta.latency,results.mode==='demo'?'consensus_demo':'consensus'])
+      .map(q).join(','));
+  });
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='bench_log.csv'; a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function copyNote(id){
+  const b=document.getElementById(id||'cp'), was=b.textContent;
+  navigator.clipboard.writeText(fullPayload()).then(()=>{
+    b.textContent='Copied — note + instructions';
+    setTimeout(()=>{b.textContent=was;},1800);
+  });
+}
+function seed(){
+  const models=M.filter(m=>sel.has(m.i)), rows={};
+  models.forEach(m=>rows[m.i]={fields:extractFor(m),usage:{in:1100,out:420},latency:900+m.i*40});
+  finish(models,rows,'demo');
+}
+drawCards();drawModels();seed();fit(document.getElementById('note'));
+document.getElementById('srcnote').textContent=runNote;
+</script>
+</body>
+</html>

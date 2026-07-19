@@ -1,0 +1,10 @@
+{
+  "name": "ai-compare-bench",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Note Extraction Bench - compare LLM field extraction from unstructured text",
+  "type": "module",
+  "engines": {
+    "node": ">=20.x"
+  }
+}
