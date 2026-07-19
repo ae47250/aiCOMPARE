@@ -3,8 +3,7 @@
 Compare how different LLMs extract structured fields from messy, unstructured job notes.
 
 Paste a note, pick models, hit run. Each model gets the same note and the same instructions, and the results land side by side in a matrix so you can see exactly which models dropped which fields.
-
----
+ 
 
 ## What's in this repo
 
